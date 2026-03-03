@@ -1,0 +1,51 @@
+[package]
+name = "syncai"
+version = "0.1.0"
+edition = "2021"
+authors = ["小爆弹 <klee@openclaw.ai>"]
+description = "Peer-to-peer file sync tool for OpenClaw nodes"
+repository = "https://github.com/claw-works/syncai"
+license = "MIT"
+
+[[bin]]
+name = "syncai"
+path = "src/main.rs"
+
+[dependencies]
+# Async runtime
+tokio = { version = "1", features = ["full"] }
+
+# HTTP server (server mode)
+axum = "0.8"
+
+# HTTP client (push mode) - use rustls to avoid OpenSSL system dependency
+reqwest = { version = "0.12", default-features = false, features = ["stream", "multipart", "rustls-tls", "json"] }
+
+# CLI
+clap = { version = "4", features = ["derive", "env"] }
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# File hashing (incremental sync)
+sha2 = "0.10"
+hex = "0.4"
+
+# Walking directories
+walkdir = "2"
+
+# Progress bar
+indicatif = "0.17"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Compression
+flate2 = "1"
+tar = "0.4"
+
+# Error handling
+anyhow = "1"
+thiserror = "2"
