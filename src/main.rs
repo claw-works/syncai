@@ -4,6 +4,7 @@ mod server;
 mod client;
 mod sync;
 mod error;
+mod watcher;
 
 #[derive(Parser)]
 #[command(
@@ -21,47 +22,43 @@ struct Cli {
 enum Commands {
     /// Start sync server (run on the target/test machine)
     Server {
-        /// Port to listen on
         #[arg(short, long, default_value = "9876")]
         port: u16,
-
-        /// Authentication token
         #[arg(short, long, env = "SYNCAI_TOKEN")]
         token: String,
-
-        /// Directory to receive files into
         #[arg(short, long, default_value = ".")]
         dir: String,
     },
 
     /// Push a local directory to a remote syncai server
     Push {
-        /// Local directory to sync
         source: String,
-
-        /// Remote target (host:port)
         target: String,
-
-        /// Authentication token
         #[arg(short, long, env = "SYNCAI_TOKEN")]
         token: String,
-
-        /// Force full sync (skip incremental diff)
         #[arg(long)]
         full: bool,
     },
 
     /// Pull a directory from a remote syncai server
     Pull {
-        /// Remote source (host:port)
         source: String,
-
-        /// Local directory to sync into
         target: String,
-
-        /// Authentication token
         #[arg(short, long, env = "SYNCAI_TOKEN")]
         token: String,
+    },
+
+    /// Watch a local directory and auto-push changes to a remote syncai server
+    Watch {
+        /// Local directory to watch
+        source: String,
+        /// Remote target (host:port)
+        target: String,
+        #[arg(short, long, env = "SYNCAI_TOKEN")]
+        token: String,
+        /// Debounce delay in ms (wait for changes to settle before syncing)
+        #[arg(long, default_value = "500")]
+        debounce: u64,
     },
 }
 
@@ -85,6 +82,9 @@ async fn main() -> anyhow::Result<()> {
         }
         Commands::Pull { source, target, token } => {
             client::pull(&source, &target, &token).await?;
+        }
+        Commands::Watch { source, target, token, debounce } => {
+            watcher::watch(&source, &target, &token, debounce).await?;
         }
     }
 
