@@ -107,6 +107,31 @@ async fn handle_file_upload(
     }
 }
 
+/// GET /file/:path — download a file
+async fn handle_file_download(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Path(rel_path): Path<String>,
+) -> impl IntoResponse {
+    if !auth(&headers, &state.token) {
+        return (StatusCode::UNAUTHORIZED, vec![]).into_response();
+    }
+
+    let rel_path = rel_path.replace("..", "").trim_start_matches('/').to_string();
+    let target = state.root.join(&rel_path);
+
+    match std::fs::read(&target) {
+        Ok(contents) => {
+            info!("Serving: {} ({} bytes)", rel_path, contents.len());
+            (StatusCode::OK, contents).into_response()
+        }
+        Err(e) => {
+            warn!("Failed to read {}: {}", rel_path, e);
+            (StatusCode::NOT_FOUND, vec![]).into_response()
+        }
+    }
+}
+
 /// DELETE /file/:path — delete an orphaned file
 async fn handle_file_delete(
     State(state): State<Arc<AppState>>,
@@ -150,6 +175,7 @@ pub async fn run(port: u16, token: String, dir: String) -> Result<()> {
         .route("/health", get(handle_health))
         .route("/manifest", get(handle_manifest))
         .route("/diff", post(handle_diff))
+        .route("/file/{*path}", get(handle_file_download))
         .route("/file/{*path}", post(handle_file_upload))
         .route("/file/{*path}", axum::routing::delete(handle_file_delete))
         .with_state(state);
