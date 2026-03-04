@@ -150,8 +150,8 @@ pub async fn run(port: u16, token: String, dir: String) -> Result<()> {
         .route("/health", get(handle_health))
         .route("/manifest", get(handle_manifest))
         .route("/diff", post(handle_diff))
-        .route("/file/*path", post(handle_file_upload))
-        .route("/file/*path", axum::routing::delete(handle_file_delete))
+        .route("/file/{*path}", post(handle_file_upload))
+        .route("/file/{*path}", axum::routing::delete(handle_file_delete))
         .with_state(state);
 
     let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{}", port)).await?;
