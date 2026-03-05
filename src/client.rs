@@ -2,7 +2,7 @@ use anyhow::Result;
 use indicatif::{ProgressBar, ProgressStyle};
 use reqwest::Client;
 use std::path::PathBuf;
-use tracing::info;
+use tracing::{info, warn};
 
 use crate::sync::{build_manifest, DiffRequest, DiffResponse};
 
@@ -181,6 +181,56 @@ pub async fn pull(source: &str, target: &str, token: &str) -> Result<()> {
 
     pb.finish_with_message("done");
     println!("✅ Pull complete! {} files received.", diff.needed.len());
+
+    Ok(())
+}
+
+/// Push a local directory to multiple remote syncai servers concurrently.
+/// Single target is just a degenerate case of multi-target.
+pub async fn push_multi(source: &str, targets: &[String], token: &str, full: bool) -> Result<()> {
+    if targets.len() == 1 {
+        return push(source, &targets[0], token, full).await;
+    }
+
+    println!("📡 Broadcasting to {} targets...", targets.len());
+
+    let handles: Vec<_> = targets
+        .iter()
+        .map(|target| {
+            let source = source.to_string();
+            let target = target.clone();
+            let token = token.to_string();
+            tokio::spawn(async move {
+                let result = push(&source, &target, &token, full).await;
+                (target, result)
+            })
+        })
+        .collect();
+
+    let mut success = 0;
+    let mut failed = 0;
+    for handle in handles {
+        match handle.await {
+            Ok((target, Ok(()))) => {
+                info!("✅ {}: sync complete", target);
+                success += 1;
+            }
+            Ok((target, Err(e))) => {
+                warn!("⚠️  {}: sync failed — {}", target, e);
+                failed += 1;
+            }
+            Err(e) => {
+                warn!("⚠️  Task panicked: {}", e);
+                failed += 1;
+            }
+        }
+    }
+
+    println!("\n📊 Result: {} succeeded, {} failed", success, failed);
+    if failed > 0 {
+        // Don't bail — partial success is still useful
+        warn!("{} target(s) failed, but continuing", failed);
+    }
 
     Ok(())
 }

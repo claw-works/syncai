@@ -7,14 +7,14 @@ use tokio::sync::mpsc;
 use tokio::time::sleep;
 use tracing::{info, warn};
 
-use crate::client::push;
+use crate::client::push_multi;
 
-/// Watch a local directory and push changes to a remote syncai server.
-pub async fn watch(source: &str, target: &str, token: &str, debounce_ms: u64) -> Result<()> {
+/// Watch a local directory and push changes to one or more remote syncai servers.
+pub async fn watch(source: &str, targets: &[String], token: &str, debounce_ms: u64) -> Result<()> {
     let root = PathBuf::from(source).canonicalize()
         .unwrap_or_else(|_| PathBuf::from(source));
 
-    info!("👀 Watching {:?} → {}", root, target);
+    info!("👀 Watching {:?} → {:?}", root, targets);
     info!("Debounce: {}ms. Press Ctrl+C to stop.", debounce_ms);
 
     // Channel to receive raw fs events
@@ -26,11 +26,15 @@ pub async fn watch(source: &str, target: &str, token: &str, debounce_ms: u64) ->
     })?;
 
     watcher.watch(&root, RecursiveMode::Recursive)?;
-    println!("👀 Watching {} → {}", root.display(), target);
+    if targets.len() == 1 {
+        println!("👀 Watching {} → {}", root.display(), targets[0]);
+    } else {
+        println!("👀 Watching {} → {} targets: {}", root.display(), targets.len(), targets.join(", "));
+    }
     println!("   Debounce: {}ms | Ctrl+C to stop", debounce_ms);
 
     let token = Arc::new(token.to_string());
-    let target = Arc::new(target.to_string());
+    let targets = Arc::new(targets.to_vec());
     let source = Arc::new(source.to_string());
     let debounce = Duration::from_millis(debounce_ms);
 
@@ -67,17 +71,17 @@ pub async fn watch(source: &str, target: &str, token: &str, debounce_ms: u64) ->
                 }
             }
             _ = sleep(timeout), if pending => {
-                // Debounce expired — run push
+                // Debounce expired — run push_multi
                 let elapsed = last_event.map(|t| t.elapsed()).unwrap_or_default();
                 if elapsed >= debounce {
                     pending = false;
                     last_event = None;
-                    info!("🔄 Change detected, syncing...");
+                    info!("🔄 Change detected, syncing to {} target(s)...", targets.len());
                     let t = token.clone();
-                    let tgt = target.clone();
+                    let tgts = targets.clone();
                     let src = source.clone();
                     tokio::spawn(async move {
-                        match push(&src, &tgt, &t, false).await {
+                        match push_multi(&src, &tgts, &t, false).await {
                             Ok(()) => {}
                             Err(e) => warn!("Sync failed: {}", e),
                         }

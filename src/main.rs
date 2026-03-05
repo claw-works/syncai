@@ -30,14 +30,18 @@ enum Commands {
         dir: String,
     },
 
-    /// Push a local directory to a remote syncai server
+    /// Push a local directory to one or more remote syncai servers
     Push {
         source: String,
+        /// Primary target (host:port) — required for backward compatibility
         target: String,
         #[arg(short, long, env = "SYNCAI_TOKEN")]
         token: String,
         #[arg(long)]
         full: bool,
+        /// Additional targets (comma-separated host:port list, e.g. node2:9876,node3:9876)
+        #[arg(long, value_delimiter = ',')]
+        targets: Vec<String>,
     },
 
     /// Pull a directory from a remote syncai server
@@ -48,17 +52,20 @@ enum Commands {
         token: String,
     },
 
-    /// Watch a local directory and auto-push changes to a remote syncai server
+    /// Watch a local directory and auto-push changes to one or more remote syncai servers
     Watch {
         /// Local directory to watch
         source: String,
-        /// Remote target (host:port)
+        /// Primary target (host:port)
         target: String,
         #[arg(short, long, env = "SYNCAI_TOKEN")]
         token: String,
         /// Debounce delay in ms (wait for changes to settle before syncing)
         #[arg(long, default_value = "500")]
         debounce: u64,
+        /// Additional targets (comma-separated host:port list, e.g. node2:9876,node3:9876)
+        #[arg(long, value_delimiter = ',')]
+        targets: Vec<String>,
     },
 }
 
@@ -77,14 +84,18 @@ async fn main() -> anyhow::Result<()> {
         Commands::Server { port, token, dir } => {
             server::run(port, token, dir).await?;
         }
-        Commands::Push { source, target, token, full } => {
-            client::push(&source, &target, &token, full).await?;
+        Commands::Push { source, target, token, full, targets } => {
+            let mut all_targets = vec![target];
+            all_targets.extend(targets);
+            client::push_multi(&source, &all_targets, &token, full).await?;
         }
         Commands::Pull { source, target, token } => {
             client::pull(&source, &target, &token).await?;
         }
-        Commands::Watch { source, target, token, debounce } => {
-            watcher::watch(&source, &target, &token, debounce).await?;
+        Commands::Watch { source, target, token, debounce, targets } => {
+            let mut all_targets = vec![target];
+            all_targets.extend(targets);
+            watcher::watch(&source, &all_targets, &token, debounce).await?;
         }
     }
 
